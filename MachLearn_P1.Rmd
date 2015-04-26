@@ -1,0 +1,88 @@
+---
+title: "Human Activity Recognition"
+author: "Jeremy Verbit"
+date: "04/26/2015"
+---
+
+##Abstract
+Using the Human Activity Recognition dataset located at http://groupware.les.inf.puc-rio.br/har 
+we will predict the classe of additional participants in the study.
+
+###Get Data
+Read in the Human Activity Recognition dataset.
+```{r}
+if(!file.exists('C:/Stuff/Coursera/MachLearn_P1')){dir.create('C:/Stuff/Coursera/MachLearn_P1')}
+if(getwd()!='C:/Stuff/Coursera/MachLearn_P1'){setwd('C:/Stuff/Coursera/MachLearn_P1')}
+
+download.file('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv', destfile='./pml-training.csv', method = 'curl')
+download.file('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv', destfile='./pml-testing.csv', method = 'curl')
+
+training <- read.csv('./pml-training.csv', na.string=c("NA",""))
+validation <- read.csv('./pml-testing.csv', na.string=c("NA",""))
+```
+
+###Pre-Process Data
+Let's first check to see how many columns have NA values.
+```{r}
+table(colSums(is.na(training))/nrow(training))
+```
+We see that 100 columns have NA for more than 97% of rows, so we'll eliminate those columns from our datasets.
+```{r}
+training_colNACount <- colSums(is.na(training))/nrow(training)
+removeColumns <- training_colNACount >= 0.97
+training <- training[!removeColumns]
+validation <- validation[!removeColumns]
+```
+We should also remove the row count in the 1st column because it is in no way related to the movement.
+```{r}
+training <- training[,2:ncol(training)]
+validation <- validation[,2:ncol(validation)]
+```
+
+###Build Model
+We will use a random forest machine learning technique to build our prediction model and use 4-fold cross validation to check it.
+```{r}
+library(caret)
+library(randomForest)
+
+partition <- createDataPartition(y=training$classe, p=0.7, list=FALSE)
+training <- training[partition,]
+testing <- training[-partition,]
+
+trControl <- trainControl(method = "cv", number = 4, allowParallel=TRUE)
+modFit <- train(classe ~ ., data=training, method='rf', trControl=trControl)
+```
+
+###Check Accuracy
+First, we'll check the in sample accuracy.
+
+```{r}
+training_pred <- predict(modFit, training)
+confusionMatrix(training_pred, training$classe)
+```
+
+We see that the in sample accuracy is 100%.  Next, we'll check the out of sample accuracy.
+
+```{r}
+testing_pred <- predict(modFit, testing)
+confusionMatrix(testing_pred, testing$classe)
+```
+
+We see that the out of sample accuracy is 100%.  We've built a great model.
+
+###Predict
+Now let's predict the classes of our validation set and output them for submissions.
+```{r}
+answers <- predict(modFit, newdata=validation)
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(answers)
+answers
+```
